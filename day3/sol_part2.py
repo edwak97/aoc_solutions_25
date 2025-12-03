@@ -7,16 +7,12 @@ def getBestVal(seq:list, begin:int = 0, n:int = 12):
     '''
     if n == 0:
         return 0
-    best_match, best_digit = 0, 0
+    best_digit, best_spot = 0, 0
     for i in range(begin, len(seq) - n + 1):
-        best_digit = max(best_digit, seq[i])
-    for i in range(begin, len(seq) - n + 1):
-        #tiny optimization
-        if seq[i] < best_digit:
-            continue
-        prefix = seq[i] * 10 ** (n - 1)
-        best_match = max(best_match, prefix + getBestVal(seq, i + 1, n - 1))
-    return best_match
+        if seq[i] > best_digit:
+            best_spot, best_digit = i, seq[i]
+    prefix = best_digit * 10 ** (n-1)
+    return prefix + getBestVal(seq, best_spot + 1, n - 1)
 
 if __name__ == '__main__':
     sequences = []
