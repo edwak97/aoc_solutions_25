@@ -47,7 +47,7 @@ def processLines(lines, operator_line):
 if __name__ == '__main__':
     with open("test_file") as file:
         lines = [list(line) for line in file.readlines()]
-    operator_line = list(lines.pop())
+    operator_line = lines.pop()
     retrieveOperators(operator_line)
     print(processLines(lines, operator_line))
 
