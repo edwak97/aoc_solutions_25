@@ -20,8 +20,4 @@ if __name__ == '__main__':
             couple = (box0, box1)
             updateJunction(box_to_junction, box_to_junction[box0], box_to_junction[box1])
         i += 1
-    junction_size = [0] * len(lines)
-    for j_id in box_to_junction:
-        junction_size[j_id] += 1
-    junction_size.sort()
     print(lines[couple[0]][0] * lines[couple[1]][0])
