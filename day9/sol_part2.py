@@ -111,7 +111,7 @@ assert test_y_by_x == expected_y_by_x
 def getOrientedGraph(coords):
     x_by_y = getXByY(coords)
     y_by_x = getYByX(coords)
-    rearrangeItems(x_by_y, y_by_x)
+    #rearrangeItems(x_by_y, y_by_x)
     result = dict()
     for x in y_by_x:
        for i in range(1, len(y_by_x[x])):
@@ -154,7 +154,6 @@ def dfs(graph, base_node, previous_node, current_node, path_set, paths, checked_
         _path.append(node)
         dfs(graph, base_node, current_node, node, _path, paths, checked_for_polygon)
 
-
 def getPolygons(graph):
     cycled_paths = []
     checked_for_polygon = set()
@@ -165,25 +164,27 @@ def getPolygons(graph):
     return cycled_paths
 
 def isXYInPolygone(x, y, x_keys, vertical_items):
-    x_i_start = lbs(x_keys, x)
-    if x > x_keys[x_i_start]:
-        # this dot if out of polygon, it is on the left side
+    x_l_start = rbs(x_keys, x)
+    x_r_start = lbs(x_keys, x)
+    right_value = x_keys[x_r_start]
+    left_value = x_keys[x_l_start]
+    if x == right_value:
+        if vertical_items[x][(y_i:=lbs(vertical_items[x], y))] == y:
+            return True
+    if (x > right_value) or (x < left_value):
         return False
     intersect_count = 0
-    for x_index in range(x_i_start, len(x_keys)):
+    #forward:
+    for x_index in range(x_r_start, len(x_keys)):
         column_x = x_keys[x_index]
         y_i_above = lbs(vertical_items[column_x], y)
         y_i_below = rbs(vertical_items[column_x], y)
         y_above = vertical_items[column_x][y_i_above]
         if y_above == y:
-            if x == column_x:
-                return True
             intersect_count += 1
         elif ((y_i_below % 2) == 0) and ((y_i_above % 2) != 0):
             intersect_count += 1
-    if intersect_count % 2 == 0:
-        return False
-    return True
+    return (intersect_count % 2) != 0
 
 def areItemsInside(items_of_rectangle, chained_intervals):
     vertical_items = dict()
@@ -199,15 +200,8 @@ def areItemsInside(items_of_rectangle, chained_intervals):
             vertical_items[x_i] = [y_prev, y_i]
     for x in vertical_items:
         vertical_items[x].sort()
-    '''
-    if len(chained_intervals) == 9:
-        print("rectangle", items_of_rectangle)
-        print("vertical_items", vertical_items)
-    '''
     x_keys = sorted(list(vertical_items.keys()))
     for x, y in items_of_rectangle:
-        if (x, y) in chained_intervals:
-            continue
         if not isXYInPolygone(x, y, x_keys, vertical_items):
             return False
     return True
@@ -224,7 +218,7 @@ def insidePolygon(polygons, x_min, y_min, x_max, y_max):
 
 if __name__ == '__main__':
     coords = []
-    with open("test_file2") as file:
+    with open("test_file") as file:
         coords = [tuple(map(int, line.strip().split(','))) for line in file.readlines()]
     best = 0
     for x1, y1 in coords:
@@ -235,7 +229,6 @@ if __name__ == '__main__':
     graph = getOrientedGraph(coords)
     makeUnoriented(graph)
     polygons = getPolygons(graph)
-    print(polygons)
     best = 0
     for (x1, y1) in coords:
         for (x2, y2) in coords:
