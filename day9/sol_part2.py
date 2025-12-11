@@ -1,3 +1,5 @@
+import copy
+
 def lbs(arr, val):
     l, r = 0, len(arr) - 1
     while l < r:
@@ -18,7 +20,7 @@ def rbs(arr, val):
             r = c - 1
     return l
 
-def getXByY(coords):
+def getYByX(coords):
     y_by_x = dict()
     for x, y in coords:
         if x not in y_by_x:
@@ -27,7 +29,7 @@ def getXByY(coords):
             y_by_x[x].append(y)
     return y_by_x
 
-def getYByX(coords):
+def getXByY(coords):
     x_by_y = dict()
     for x, y in coords:
         if y not in x_by_y:
@@ -135,39 +137,119 @@ def makeUnoriented(graph):
             else:
                 backwards[_node].append(node)
     for node in backwards:
-        graph[node] = backwards[node]
+        if node in graph:
+            graph[node] += backwards[node]
+        else:
+            graph[node] = backwards[node]
+
+def dfs(graph, base_node, previous_node, current_node, path_set, paths, checked_for_polygon):
+    for node in graph[current_node]:
+        if node in checked_for_polygon:
+            continue
+        _path = copy.copy(path_set)
+        if (node == base_node) and (previous_node != base_node):
+            paths.append(_path)
+        if node in _path:
+            continue
+        _path.append(node)
+        dfs(graph, base_node, current_node, node, _path, paths, checked_for_polygon)
+
 
 def getPolygons(graph):
-    polygons = []
-    for node in graph:
-        if len(graph[node]) > 1:
-            pass
+    cycled_paths = []
+    checked_for_polygon = set()
+    for base_node in graph:
+        path = [base_node]
+        dfs(graph, base_node, None, base_node, path, cycled_paths, checked_for_polygon)
+        checked_for_polygon.add(base_node)
+    return cycled_paths
 
-def insidePolygon(polygons, x1, y1, x2, y2):
-    pass
+def isXYInPolygone(x, y, x_keys, vertical_items):
+    x_i_start = lbs(x_keys, x)
+    if x > x_keys[x_i_start]:
+        # this dot if out of polygon, it is on the left side
+        return False
+    intersect_count = 0
+    for x_index in range(x_i_start, len(x_keys)):
+        column_x = x_keys[x_index]
+        y_i_above = lbs(vertical_items[column_x], y)
+        y_i_below = rbs(vertical_items[column_x], y)
+        y_above = vertical_items[column_x][y_i_above]
+        if y_above == y:
+            if x == column_x:
+                return True
+            intersect_count += 1
+        elif ((y_i_below % 2) == 0) and ((y_i_above % 2) != 0):
+            intersect_count += 1
+    if intersect_count % 2 == 0:
+        return False
+    return True
+
+def areItemsInside(items_of_rectangle, chained_intervals):
+    vertical_items = dict()
+    #vertical item has a body like :(y0, y1)
+    for i in range(1, len(chained_intervals)):
+        x_i, y_i = chained_intervals[i]
+        x_prev, y_prev = chained_intervals[i-1]
+        if y_i == y_prev:
+            continue
+        if x_i in vertical_items:
+            vertical_items[x_i] += [y_prev, y_i]
+        else:
+            vertical_items[x_i] = [y_prev, y_i]
+    for x in vertical_items:
+        vertical_items[x].sort()
+    '''
+    if len(chained_intervals) == 9:
+        print("rectangle", items_of_rectangle)
+        print("vertical_items", vertical_items)
+    '''
+    x_keys = sorted(list(vertical_items.keys()))
+    for x, y in items_of_rectangle:
+        if (x, y) in chained_intervals:
+            continue
+        if not isXYInPolygone(x, y, x_keys, vertical_items):
+            return False
+    return True
+        
+def insidePolygon(polygons, x_min, y_min, x_max, y_max):
+    items_of_rectangle = [(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)]
+    for polygon in polygons:
+        chained_intervals = copy.copy(polygon)
+        chained_intervals.append(polygon[0])
+        polygon_ok = areItemsInside(items_of_rectangle, chained_intervals)
+        if polygon_ok:
+            return True
+    return False
 
 if __name__ == '__main__':
     coords = []
-    with open("test_file") as file:
+    with open("test_file2") as file:
         coords = [tuple(map(int, line.strip().split(','))) for line in file.readlines()]
     best = 0
-    for i, (x1, y1) in enumerate(coords):
-        for _, (x2, y2) in enumerate(coords, i + 1):
+    for x1, y1 in coords:
+        for x2, y2 in coords:
             best = max(best, abs(x1 - x2 +1) * abs(y1 - y2 + 1))
     #Part 1:
     print('Part 1', best)
     graph = getOrientedGraph(coords)
     makeUnoriented(graph)
     polygons = getPolygons(graph)
-    pexit()
-    for i, (x1, y1) in enumerate(coords):
-        for _, (x2, y2) in enumerate(coords, i + 1):
+    print(polygons)
+    best = 0
+    for (x1, y1) in coords:
+        for (x2, y2) in coords:
             min_x, max_x = min(x1, x2), max(x1, x2)
             min_y, max_y = min(y1, y2), max(y1, y2)
+            '''
+            if (min_x != 2) or (min_y != 3) or (max_x != 9) or (max_y != 5):
+                #debug
+                continue
+            '''
             _best = max(best, (max_x - min_x + 1) * (max_y - min_y + 1))
-            if (_best > best) and insidePolygon(polygons, x1, y1, x2, y2):
+            if (_best > best) and insidePolygon(polygons, min_x, min_y, max_x, max_y):
                 best = _best
-    print('Part 2', _best)
+    print('Part 2', best)
         
 
 
