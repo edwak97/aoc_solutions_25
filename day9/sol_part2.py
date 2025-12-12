@@ -1,20 +1,18 @@
-import copy
-
-def lbs(arr, val):
+def lbs(arr, val, fun = lambda x:x):
     l, r = 0, len(arr) - 1
     while l < r:
         c = (l + r) // 2
-        if arr[c] >= val:
+        if fun(arr[c]) >= val:
             r = c
         else:
             l = c + 1
     return l
 
-def rbs(arr, val):
+def rbs(arr, val, fun = lambda x: x):
     l, r = 0, len(arr) - 1
     while l < r:
         c = (l + r + 1) // 2
-        if arr[c] <= val:
+        if fun(arr[c]) <= val:
             l = c
         else:
             r = c - 1
@@ -111,7 +109,7 @@ assert test_y_by_x == expected_y_by_x
 def getOrientedGraph(coords):
     x_by_y = getXByY(coords)
     y_by_x = getYByX(coords)
-    #rearrangeItems(x_by_y, y_by_x)
+    rearrangeItems(x_by_y, y_by_x)
     result = dict()
     for x in y_by_x:
        for i in range(1, len(y_by_x[x])):
@@ -173,48 +171,47 @@ def isXYInPolygone(x, y, vertical_items):
     x_r_start = lbs(x_keys, x)
     right_value = x_keys[x_r_start]
     left_value = x_keys[x_l_start]
-    if x == right_value: # == left_value:
-        if vertical_items[x][lbs(vertical_items[x], y)] == y:
-            return True
     if (x > right_value) or (x < left_value):
         return False
     intersect_count = 0
     #forward:
+    prev_cross_x = None
     for x_index in range(x_r_start, len(x_keys)):
-        column_x = x_keys[x_index]
-        y_i_above = lbs(vertical_items[column_x], y)
-        y_i_below = rbs(vertical_items[column_x], y)
-        y_above = vertical_items[column_x][y_i_above]
-        y_below = vertical_items[column_x][y_i_below]
-        if y_above == y:
-            intersect_count += 1
-        elif ((y_i_below % 2) == 0) and ((y_i_above % 2) != 0):
-            intersect_count += 1
+        x_val = x_keys[x_index]
+        # By this moment we have sorted list of intervals stored at vertical_items[x_val]
+        above_end = lbs(vertical_items[x_val], y, lambda _x: _x[1])
+        below_begin = rbs(vertical_items[x_val], y, lambda _x: _x[0])
+        v0, v1 = vertical_items[x_val][below_begin]
+        v2, v3 = vertical_items[x_val][above_end]
+
+        if (y in {v0, v1, v2, v3}) and (x_val == x):
+            return True
+        if (v0 <= y <= v1) or (v2 <= y <= v3):
+            if (prev_cross_x == None) or (prev_cross_x != x_val - 1):
+                intersect_count += 1
+            prev_cross_x = x_val
     return (intersect_count % 2) != 0
 
 def areItemsInside(items_of_rectangle, polygon):
     vertical_items = dict()
-    #vertical item has a body like :(y0, y1)
-    for i in range(1, len(polygon) - 1):
+    #vertical item has a body like :(y0, y1) where y1 > y0
+    for i in range(1, len(polygon)):
         x_i, y_i = polygon[i]
-        x_prev, y_prev = polygon[i-1]
+        _,   y_prev = polygon[i-1]
+        
+        y_prev, y_i = min(y_i, y_prev), max(y_i, y_prev)
+
         if y_i == y_prev:
-            for x_c in [x_i, x_prev]:
-                if x_c in vertical_items:
-                    vertical_items[x_c] += [y_i, y_i]
-                else:
-                    vertical_items[x_c] = [y_i, y_i]
             continue
         if x_i in vertical_items:
-            vertical_items[x_i] += [y_prev, y_i]
+            vertical_items[x_i].append((y_prev, y_i))
         else:
-            vertical_items[x_i] = [y_prev, y_i]
+            vertical_items[x_i] = [(y_prev, y_i)]
     for x in vertical_items:
-        vertical_items[x].sort()
+        vertical_items[x].sort(key = lambda x: x[0])
     for x, y in items_of_rectangle:
         if not isXYInPolygone(x, y, vertical_items):
             return False
-    print(vertical_items)
     return True
         
 def insidePolygon(polygons, x_min, y_min, x_max, y_max):
@@ -227,22 +224,17 @@ def insidePolygon(polygons, x_min, y_min, x_max, y_max):
 
 if __name__ == '__main__':
     coords = []
-    with open("test_file") as file:
+    with open("test_file2") as file:
         coords = [tuple(map(int, line.strip().split(','))) for line in file.readlines()]
     best = 0
     for x1, y1 in coords:
         for x2, y2 in coords:
             best = max(best, abs(x1 - x2 +1) * abs(y1 - y2 + 1))
     #Part 1:
-    print('Part 2', best)
+    print('Part 1', best)
     graph = getOrientedGraph(coords)
     makeUnoriented(graph)
     polygons = getPolygons(graph)
-    print(polygons)
-    '''
-    for polygon in polygons:
-        printInterval(polygon)
-    '''
     best = 0
     for (x1, y1) in coords:
         for (x2, y2) in coords:
@@ -251,6 +243,7 @@ if __name__ == '__main__':
             _best = max(best, (max_x - min_x + 1) * (max_y - min_y + 1))
             if (_best > best) and insidePolygon(polygons, min_x, min_y, max_x, max_y):
                 best = _best
+    print(polygons)
     print('Part 2', best)
         
 
