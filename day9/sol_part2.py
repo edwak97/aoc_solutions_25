@@ -142,34 +142,39 @@ def makeUnoriented(graph):
         else:
             graph[node] = backwards[node]
 
-def dfs(graph, base_node, previous_node, current_node, path_set, paths, checked_for_polygon):
+def dfs(graph, base_node, current_node, path, paths, checked_for_polygon):
     for node in graph[current_node]:
-        if node in checked_for_polygon:
+        if (node in checked_for_polygon):
             continue
-        _path = copy.copy(path_set)
-        if (node == base_node) and (previous_node != base_node):
-            paths.append(_path)
-        if node in _path:
+        if (node == base_node) and (len(path) > 1) and (path[-2] != base_node):
+            paths.append(path + (node,))
             continue
-        _path.append(node)
-        dfs(graph, base_node, current_node, node, _path, paths, checked_for_polygon)
+        if node in path:
+            continue
+        dfs(graph, base_node, node, path + (node,), paths, checked_for_polygon)
 
 def getPolygons(graph):
     cycled_paths = []
+    #this set contains items for which loops have been considered already
     checked_for_polygon = set()
     for base_node in graph:
-        path = [base_node]
-        dfs(graph, base_node, None, base_node, path, cycled_paths, checked_for_polygon)
+        path = (base_node,)
+        dfs(graph, base_node, base_node, path, cycled_paths, checked_for_polygon)
         checked_for_polygon.add(base_node)
+    for i in range(len(cycled_paths)-1, -1, -1):
+        if tuple(reversed(cycled_paths[i])) in cycled_paths:
+            del cycled_paths[i]
     return cycled_paths
 
-def isXYInPolygone(x, y, x_keys, vertical_items):
+def isXYInPolygone(x, y, vertical_items):
+    x_keys = sorted(list(vertical_items.keys()))
+    #index of the closest value on the LEFT side of list with ascending order:
     x_l_start = rbs(x_keys, x)
     x_r_start = lbs(x_keys, x)
     right_value = x_keys[x_r_start]
     left_value = x_keys[x_l_start]
-    if x == right_value:
-        if vertical_items[x][(y_i:=lbs(vertical_items[x], y))] == y:
+    if x == right_value: # == left_value:
+        if vertical_items[x][lbs(vertical_items[x], y)] == y:
             return True
     if (x > right_value) or (x < left_value):
         return False
@@ -180,19 +185,25 @@ def isXYInPolygone(x, y, x_keys, vertical_items):
         y_i_above = lbs(vertical_items[column_x], y)
         y_i_below = rbs(vertical_items[column_x], y)
         y_above = vertical_items[column_x][y_i_above]
+        y_below = vertical_items[column_x][y_i_below]
         if y_above == y:
             intersect_count += 1
         elif ((y_i_below % 2) == 0) and ((y_i_above % 2) != 0):
             intersect_count += 1
     return (intersect_count % 2) != 0
 
-def areItemsInside(items_of_rectangle, chained_intervals):
+def areItemsInside(items_of_rectangle, polygon):
     vertical_items = dict()
     #vertical item has a body like :(y0, y1)
-    for i in range(1, len(chained_intervals)):
-        x_i, y_i = chained_intervals[i]
-        x_prev, y_prev = chained_intervals[i-1]
+    for i in range(1, len(polygon) - 1):
+        x_i, y_i = polygon[i]
+        x_prev, y_prev = polygon[i-1]
         if y_i == y_prev:
+            for x_c in [x_i, x_prev]:
+                if x_c in vertical_items:
+                    vertical_items[x_c] += [y_i, y_i]
+                else:
+                    vertical_items[x_c] = [y_i, y_i]
             continue
         if x_i in vertical_items:
             vertical_items[x_i] += [y_prev, y_i]
@@ -200,18 +211,16 @@ def areItemsInside(items_of_rectangle, chained_intervals):
             vertical_items[x_i] = [y_prev, y_i]
     for x in vertical_items:
         vertical_items[x].sort()
-    x_keys = sorted(list(vertical_items.keys()))
     for x, y in items_of_rectangle:
-        if not isXYInPolygone(x, y, x_keys, vertical_items):
+        if not isXYInPolygone(x, y, vertical_items):
             return False
+    print(vertical_items)
     return True
         
 def insidePolygon(polygons, x_min, y_min, x_max, y_max):
     items_of_rectangle = [(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)]
     for polygon in polygons:
-        chained_intervals = copy.copy(polygon)
-        chained_intervals.append(polygon[0])
-        polygon_ok = areItemsInside(items_of_rectangle, chained_intervals)
+        polygon_ok = areItemsInside(items_of_rectangle, polygon)
         if polygon_ok:
             return True
     return False
@@ -225,20 +234,20 @@ if __name__ == '__main__':
         for x2, y2 in coords:
             best = max(best, abs(x1 - x2 +1) * abs(y1 - y2 + 1))
     #Part 1:
-    print('Part 1', best)
+    print('Part 2', best)
     graph = getOrientedGraph(coords)
     makeUnoriented(graph)
     polygons = getPolygons(graph)
+    print(polygons)
+    '''
+    for polygon in polygons:
+        printInterval(polygon)
+    '''
     best = 0
     for (x1, y1) in coords:
         for (x2, y2) in coords:
             min_x, max_x = min(x1, x2), max(x1, x2)
             min_y, max_y = min(y1, y2), max(y1, y2)
-            '''
-            if (min_x != 2) or (min_y != 3) or (max_x != 9) or (max_y != 5):
-                #debug
-                continue
-            '''
             _best = max(best, (max_x - min_x + 1) * (max_y - min_y + 1))
             if (_best > best) and insidePolygon(polygons, min_x, min_y, max_x, max_y):
                 best = _best
