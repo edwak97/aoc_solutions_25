@@ -116,6 +116,49 @@ assert test_x_by_y == expected_x_by_y
 assert test_y_by_x == expected_y_by_x
 # TEST END
 
+class Polyg:
+
+    def __init__(self, polyg):
+        self.val = polyg
+        self.vertical_items = self.getVerticalItems(polyg)
+        self.x_keys = sorted(tuple(self.vertical_items.keys()))
+
+        self.horizontal_items = self.getHorizontalItems(polyg)
+        self.y_keys = sorted(tuple(self.horizontal_items.keys()))
+
+    def getVerticalItems(self, polygon):
+        vertical_items = dict()
+        for i in range(1, len(polygon)):
+            x_i, y_i = polygon[i]
+            _,   y_prev = polygon[i-1]
+
+            y_prev, y_i = min(y_i, y_prev), max(y_i, y_prev)
+
+            if y_i != y_prev:
+                if x_i in vertical_items:
+                    vertical_items[x_i].append((y_prev, y_i))
+                else:
+                    vertical_items[x_i] = [(y_prev, y_i)]
+        for x in vertical_items:
+            vertical_items[x].sort()
+        return vertical_items
+
+    def getHorizontalItems(self, polygon):
+        horizontal_items = dict()
+        for i in range(1, len(polygon)):
+            x_i, y_i = polygon[i]
+            x_prev, _ = polygon[i-1]
+
+            x_prev, x_i = min(x_i, x_prev), max(x_i, x_prev)
+            if x_i != x_prev:
+                if y_i in horizontal_items:
+                    horizontal_items[y_i].append((x_prev, x_i))
+                else:
+                    horizontal_items[y_i] = [(x_prev, x_i)]
+        for y in horizontal_items:
+            horizontal_items[y].sort()
+        return horizontal_items
+
 def getGraph(coords):
     x_by_y = getXByY(coords)
     y_by_x = getYByX(coords)
@@ -174,104 +217,53 @@ def getPolygons(graph):
     for i in range(len(cycled_paths)-1, -1, -1):
         if tuple(reversed(cycled_paths[i])) in cycled_paths:
             del cycled_paths[i]
+
+    for i in range(len(cycled_paths)):
+        cycled_paths[i] = Polyg(cycled_paths[i])
+
     return cycled_paths
 
-def getSection(ordered_x_asc, y, vertical_items):
-    section = []
-    for x in ordered_x_asc:
-        i0   = lbs(vertical_items[x],(y,y))
-        i1   = rbs(vertical_items[x], (y,y))
-        y0, y1 = vertical_items[x][i0]
-        y2, y3 = vertical_items[x][i1]
-        if (y0 <= y <= y1) or (y2 <= y <= y3):
-            if x == ordered_x_asc[0]:
-                return [x]
-            if (y0 == y1 == y2 == y3):
-                section += [x, x]
-            else:
-                section.append(x)
-    return section
-
-def doesXYFit(x, y, vertical_items, x_keys, debug = False):
-    #index of the closest value on the LEFT side of list with ascending order:
-    x_l_start = rbs(x_keys, x)
-    x_r_start = lbs(x_keys, x)
-    right_value = x_keys[x_r_start]
-    left_value = x_keys[x_l_start]
-    if (x > right_value) or (x < left_value):
-        if debug:
-            print("no section")
+def isInsidePolygon(polygon, x_min, y_min, x_max, y_max):
+    #no line of the cycled path from x_min to x_max crosses vertical items
+    #(except those on boundaries)
+    left_boundary, right_boundary = polygon.x_keys[0], polygon.x_keys[-1]
+    up_boundary, down_boundary = polygon.y_keys[-1], polygon.y_keys[0]
+    if (x_min < left_boundary) or (x_max > right_boundary) or (y_max > up_boundary) or (y_min < down_boundary):
         return False
-    section = getSection(x_keys[x_l_start:], y, vertical_items)
-    if debug:
-        print("this is the section:", section)
-    if len(section) == 0:
-        return False
-    
-    intersection_count = 1
-    for i in range(1, len(section)):
-        if section[i] != (section[i-1] + 1):
-            intersection_count += 1
-    return (intersection_count % 2) == 1
+    for x, x_boundary in {(x_min, left_boundary), (x_max, right_boundary)}:
+        if x == x_boundary:
+            for y in {y_min, y_max}:
+                interval_i = lbs(polygon.vertical_items[x], y, lambda x:x[1])
+                y0, y1 = polygon.vertical_items[x][interval_i]
+                if not (y0 <= y <= y1):
+                    return False
+    for y, y_boundary in {(y_min, up_boundary), (y_max, down_boundary)}:
+        if y == y_boundary:
+            for x in {x_min, x_max}:
+                interval_i = lbs(polygon.horizontal_items[y], x, lambda x:x[1])
+                x0, x1 = polygon.horizontal_items[y][interval_i]
+                if not (x0 <= x <= x1):
+                    return False
+    for x_i in range(1, len(polygon.x_keys) - 1):
+        x = polygon.x_keys[x_i]
+        # the vertical item of polygon MUST NOT cross y_min or y_max line
+        for y_line in {y_min, y_max}:
+            interval_i = lbs(polygon.vertical_items[x], y_line, lambda x:x[1])
+            y0, y1 = polygon.vertical_items[x][interval_i]
+            if (y0 < y_line < y1):
+                return False
+    for y_i in range(1, len(polygon.y_keys)-1):
+        y = polygon.y_keys[y_i]
+        for x_line in {x_min, x_max}:
+            interval_i = lbs(polygon.horizontal_items[y], x_line, lambda x:x[1])
+            x0, x1 = polygon.horizontal_items[y][interval_i]
+            if (x0 < x_line < x1):
+                return False
+    return True
 
-def getVerticalItems(polygon):
-    vertical_items = dict()
-    for i in range(1, len(polygon)):
-        x_i, y_i = polygon[i]
-        x_prev,   y_prev = polygon[i-1] 
-        y_prev, y_i = min(y_i, y_prev), max(y_i, y_prev)
-        if y_i == y_prev:
-            if x_i in vertical_items:
-                vertical_items[x_i].append((y_i, y_i))
-            else:
-                vertical_items[x_i] = [(y_i, y_i)]
-            if x_prev in vertical_items:
-                vertical_items[x_prev].append((y_i, y_i))
-            else:
-                vertical_items[x_prev] = [(y_i, y_i)]
-            continue
-        # if x_i == x_prev
-        if x_i in vertical_items:
-            vertical_items[x_i].append((y_prev, y_i))
-        else:
-            vertical_items[x_i] = [(y_prev, y_i)]
-    for x in vertical_items:
-        vertical_items[x].sort()
-    return vertical_items
-        
-def insidePolygon(polygons, x_min, y_min, x_max, y_max, debug = False):
+def isInsideSomePolygon(polygons, x_min, y_min, x_max, y_max):
     for polygon in polygons:
-        if debug:
-            print(f"Analyzing polygon {polygon}")
-        vertical_items = getVerticalItems(polygon)
-        print(vertical_items)
-        x_keys = sorted(tuple(vertical_items.keys()))
-        rl_sides, bt_sides = True, True
-        for y in {y_min, y_max}:
-            if not bt_sides:
-                break
-            for x in range(x_min, x_max + 1):
-                if debug:
-                    print(f"Analazying point ({x}, {y})")
-                if not doesXYFit(x, y, vertical_items, x_keys, debug):
-                    bt_sides = False
-                    print('point is NOT ok')
-                    break
-                print('point is ok')
-        if not bt_sides:
-            continue
-        for x in {x_min, x_max}:
-            if not rl_sides:
-                break
-            for y in range(y_min, y_max + 1):
-                if debug:
-                    print(f"Analyzing ({x}, {y})")
-                if not doesXYFit(x, y, vertical_items, x_keys, debug):
-                    rl_sides = False
-                    print('point is NOT ok')
-                    break
-                print('point is ok')
-        if rl_sides and bt_sides:
+        if isInsidePolygon(polygon, x_min, y_min, x_max, y_max):
             return True
     return False
 
@@ -281,12 +273,8 @@ def readCoords(name):
         coords = tuple([tuple(map(int, line.strip().split(','))) for line in file.readlines()]) 
     return coords
 
-def checkPolygonsConsistency(polygons):
-    for polygon in polygons:
-        assert (len(polygon) - 1) == len(set(polygon))
-
 if __name__ == '__main__':
-    coords = readCoords("test_file2")
+    coords = readCoords("test_file")
     best = 0
     for i, (x1, y1) in enumerate(coords):
         for k in range(i + 1, len(coords)):
@@ -297,19 +285,23 @@ if __name__ == '__main__':
     graph = getGraph(coords)
     polygons = getPolygons(graph)
     best = 0
-    #coords = [(2,3), (9,5)]
+    #coords = [(2,3), (9,5)
+    #print('verticals',polygons[0].vertical_items)
+    #print('horizontals',polygons[0].horizontal_items)
     for i, (x1, y1) in enumerate(coords):
         for k in range(i + 1, len(coords)):
             x2, y2 = coords[k]
             x_min, x_max = min(x1, x2), max(x1, x2)
             y_min, y_max = min(y1, y2), max(y1, y2)
-            _best = max(best, (x_max - x_min + 1) * (y_max - y_min + 1))
-            print(f"Analazying rect ({x_min}, {y_min}), ({x_max}, {y_max}) with possible s = {_best}:")
-            if (_best > best) and insidePolygon(polygons, x_min, y_min, x_max, y_max, debug):
+            _best = (x_max - x_min + 1) * (y_max - y_min + 1)
+            if debug:
+                print(f"Analazying rect ({x_min}, {y_min}), ({x_max}, {y_max}) with possible s = {_best}:")
+            if (_best > best) and isInsideSomePolygon(polygons, x_min, y_min, x_max, y_max):
                 if debug:
                     print('rect is ok')
                 best = _best
-            print('-----------\n')
+            if debug:
+                print('-----------\n')
     print('Part 2', best)
         
 
