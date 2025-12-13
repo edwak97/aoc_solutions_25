@@ -1,3 +1,5 @@
+import sys
+
 def lbs(arr, val, fun = lambda x:x):
     l, r = 0, len(arr) - 1
     while l < r:
@@ -25,6 +27,8 @@ def getYByX(coords):
             y_by_x[x] = [y]
         else:
             y_by_x[x].append(y)
+    for x in y_by_x:
+        y_by_x[x].sort()
     return y_by_x
 
 def getXByY(coords):
@@ -34,13 +38,11 @@ def getXByY(coords):
             x_by_y[y] = [x]
         else:
             x_by_y[y].append(x)
-    return x_by_y
-
-def rearrangeItems(x_by_y, y_by_x):
-    for x in y_by_x:
-        y_by_x[x].sort()
     for y in x_by_y:
         x_by_y[y].sort()
+    return x_by_y
+
+def rearrangeItems(x_by_y, y_by_x, debug = False):
     update_items_x = {}
     update_items_y = {}
     for x in y_by_x:
@@ -63,24 +65,30 @@ def rearrangeItems(x_by_y, y_by_x):
                     else:
                         update_items_y[y] = [x]
     for x in update_items_x:
+        if debug:
+            print(f"x: {x} axis updated")
         y_by_x[x] += update_items_x[x]
         y_by_x[x].sort()
     for y in update_items_y:
+        if debug:
+            print(f"y: {y} axis updated")
         x_by_y[y] += update_items_y[y]
         x_by_y[y].sort()
 ### TEST START:
 test_x_by_y = {
         -1: [10],
-        0: [22, 0, 8, 13, 15],
+        0: [0, 8, 13, 15, 22],
         2: [0, 6, 10, 13],
-        8: [0, 8, 6, 10]
+        8: [0, 6, 8, 10, 14],
+        13:[13]
         }
 test_y_by_x = {
-    0: [8, 0, 2],
+    0: [0, 2, 8],
     6: [2, 8],
     8: [0, 8],
-    10:[2, -1, 8],
-    13: [0, 2],
+    10:[-1, 2, 8],
+    13: [0, 2, 13],
+    14: [8],
     15: [0],
     22: [0]
 }
@@ -90,14 +98,16 @@ expected_x_by_y = {
     -1: [10],
     0: [0, 8, 10, 13, 15, 22],
     2: [0, 6, 8, 10, 13],
-    8: [0, 6, 8, 10]
+    8: [0, 6, 8, 10, 13, 14],
+    13: [13]
 }
 expected_y_by_x = {
     0: [0, 2, 8],
     6: [2, 8],
     8: [0, 2, 8],
     10: [-1, 0, 2, 8],
-    13: [0, 2],
+    13: [0, 2, 8, 13],
+    14: [8],
     15: [0],
     22: [0]
 }
@@ -106,10 +116,10 @@ assert test_x_by_y == expected_x_by_y
 assert test_y_by_x == expected_y_by_x
 # TEST END
 
-def getOrientedGraph(coords):
+def getGraph(coords):
     x_by_y = getXByY(coords)
     y_by_x = getYByX(coords)
-    rearrangeItems(x_by_y, y_by_x)
+    rearrangeItems(x_by_y, y_by_x, True)
     result = dict()
     for x in y_by_x:
        for i in range(1, len(y_by_x[x])):
@@ -124,6 +134,8 @@ def getOrientedGraph(coords):
                 result[prev_node].append(current_node)
             else:
                 result[prev_node] = [current_node]
+    makeUnoriented(result)
+
     return result
 
 def makeUnoriented(graph):
@@ -164,86 +176,140 @@ def getPolygons(graph):
             del cycled_paths[i]
     return cycled_paths
 
-def isXYInPolygone(x, y, vertical_items):
-    x_keys = sorted(list(vertical_items.keys()))
+def getSection(ordered_x_asc, y, vertical_items):
+    section = []
+    for x in ordered_x_asc:
+        i0   = lbs(vertical_items[x],(y,y))
+        i1   = rbs(vertical_items[x], (y,y))
+        y0, y1 = vertical_items[x][i0]
+        y2, y3 = vertical_items[x][i1]
+        if (y0 <= y <= y1) or (y2 <= y <= y3):
+            if x == ordered_x_asc[0]:
+                return [x]
+            if (y0 == y1 == y2 == y3):
+                section += [x, x]
+            else:
+                section.append(x)
+    return section
+
+def doesXYFit(x, y, vertical_items, x_keys, debug = False):
     #index of the closest value on the LEFT side of list with ascending order:
     x_l_start = rbs(x_keys, x)
     x_r_start = lbs(x_keys, x)
     right_value = x_keys[x_r_start]
     left_value = x_keys[x_l_start]
     if (x > right_value) or (x < left_value):
+        if debug:
+            print("no section")
         return False
-    intersect_count = 0
-    #forward:
-    prev_cross_x = None
-    for x_index in range(x_r_start, len(x_keys)):
-        x_val = x_keys[x_index]
-        # By this moment we have sorted list of intervals stored at vertical_items[x_val]
-        above_end = lbs(vertical_items[x_val], y, lambda _x: _x[1])
-        below_begin = rbs(vertical_items[x_val], y, lambda _x: _x[0])
-        v0, v1 = vertical_items[x_val][below_begin]
-        v2, v3 = vertical_items[x_val][above_end]
+    section = getSection(x_keys[x_l_start:], y, vertical_items)
+    if debug:
+        print("this is the section:", section)
+    if len(section) == 0:
+        return False
+    
+    intersection_count = 1
+    for i in range(1, len(section)):
+        if section[i] != (section[i-1] + 1):
+            intersection_count += 1
+    return (intersection_count % 2) == 1
 
-        if (y in {v0, v1, v2, v3}) and (x_val == x):
-            return True
-        if (v0 <= y <= v1) or (v2 <= y <= v3):
-            if (prev_cross_x == None) or (prev_cross_x != x_val - 1):
-                intersect_count += 1
-            prev_cross_x = x_val
-    return (intersect_count % 2) != 0
-
-def areItemsInside(items_of_rectangle, polygon):
+def getVerticalItems(polygon):
     vertical_items = dict()
-    #vertical item has a body like :(y0, y1) where y1 > y0
     for i in range(1, len(polygon)):
         x_i, y_i = polygon[i]
-        _,   y_prev = polygon[i-1]
-        
+        x_prev,   y_prev = polygon[i-1] 
         y_prev, y_i = min(y_i, y_prev), max(y_i, y_prev)
-
         if y_i == y_prev:
+            if x_i in vertical_items:
+                vertical_items[x_i].append((y_i, y_i))
+            else:
+                vertical_items[x_i] = [(y_i, y_i)]
+            if x_prev in vertical_items:
+                vertical_items[x_prev].append((y_i, y_i))
+            else:
+                vertical_items[x_prev] = [(y_i, y_i)]
             continue
+        # if x_i == x_prev
         if x_i in vertical_items:
             vertical_items[x_i].append((y_prev, y_i))
         else:
             vertical_items[x_i] = [(y_prev, y_i)]
     for x in vertical_items:
-        vertical_items[x].sort(key = lambda x: x[0])
-    for x, y in items_of_rectangle:
-        if not isXYInPolygone(x, y, vertical_items):
-            return False
-    return True
+        vertical_items[x].sort()
+    return vertical_items
         
-def insidePolygon(polygons, x_min, y_min, x_max, y_max):
-    items_of_rectangle = [(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)]
+def insidePolygon(polygons, x_min, y_min, x_max, y_max, debug = False):
     for polygon in polygons:
-        polygon_ok = areItemsInside(items_of_rectangle, polygon)
-        if polygon_ok:
+        if debug:
+            print(f"Analyzing polygon {polygon}")
+        vertical_items = getVerticalItems(polygon)
+        print(vertical_items)
+        x_keys = sorted(tuple(vertical_items.keys()))
+        rl_sides, bt_sides = True, True
+        for y in {y_min, y_max}:
+            if not bt_sides:
+                break
+            for x in range(x_min, x_max + 1):
+                if debug:
+                    print(f"Analazying point ({x}, {y})")
+                if not doesXYFit(x, y, vertical_items, x_keys, debug):
+                    bt_sides = False
+                    print('point is NOT ok')
+                    break
+                print('point is ok')
+        if not bt_sides:
+            continue
+        for x in {x_min, x_max}:
+            if not rl_sides:
+                break
+            for y in range(y_min, y_max + 1):
+                if debug:
+                    print(f"Analyzing ({x}, {y})")
+                if not doesXYFit(x, y, vertical_items, x_keys, debug):
+                    rl_sides = False
+                    print('point is NOT ok')
+                    break
+                print('point is ok')
+        if rl_sides and bt_sides:
             return True
     return False
 
+def readCoords(name):
+    coords = None
+    with open(name) as file:
+        coords = tuple([tuple(map(int, line.strip().split(','))) for line in file.readlines()]) 
+    return coords
+
+def checkPolygonsConsistency(polygons):
+    for polygon in polygons:
+        assert (len(polygon) - 1) == len(set(polygon))
+
 if __name__ == '__main__':
-    coords = []
-    with open("test_file2") as file:
-        coords = [tuple(map(int, line.strip().split(','))) for line in file.readlines()]
+    coords = readCoords("test_file2")
     best = 0
-    for x1, y1 in coords:
-        for x2, y2 in coords:
-            best = max(best, abs(x1 - x2 +1) * abs(y1 - y2 + 1))
-    #Part 1:
+    for i, (x1, y1) in enumerate(coords):
+        for k in range(i + 1, len(coords)):
+            x2, y2 = coords[k]
+            best = max(best, abs(x1 - x2 + 1) * abs(y1 - y2 + 1))
     print('Part 1', best)
-    graph = getOrientedGraph(coords)
-    makeUnoriented(graph)
+    debug = (len(sys.argv) > 1) and ('debug' in sys.argv)
+    graph = getGraph(coords)
     polygons = getPolygons(graph)
     best = 0
-    for (x1, y1) in coords:
-        for (x2, y2) in coords:
-            min_x, max_x = min(x1, x2), max(x1, x2)
-            min_y, max_y = min(y1, y2), max(y1, y2)
-            _best = max(best, (max_x - min_x + 1) * (max_y - min_y + 1))
-            if (_best > best) and insidePolygon(polygons, min_x, min_y, max_x, max_y):
+    #coords = [(2,3), (9,5)]
+    for i, (x1, y1) in enumerate(coords):
+        for k in range(i + 1, len(coords)):
+            x2, y2 = coords[k]
+            x_min, x_max = min(x1, x2), max(x1, x2)
+            y_min, y_max = min(y1, y2), max(y1, y2)
+            _best = max(best, (x_max - x_min + 1) * (y_max - y_min + 1))
+            print(f"Analazying rect ({x_min}, {y_min}), ({x_max}, {y_max}) with possible s = {_best}:")
+            if (_best > best) and insidePolygon(polygons, x_min, y_min, x_max, y_max, debug):
+                if debug:
+                    print('rect is ok')
                 best = _best
-    print(polygons)
+            print('-----------\n')
     print('Part 2', best)
         
 
