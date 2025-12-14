@@ -122,7 +122,7 @@ class Polyg:
         self.val = polyg
         self.vertical_items = self.getVerticalItems(polyg)
         self.x_keys = sorted(tuple(self.vertical_items.keys()))
-
+        self.dots = set(polyg)
         self.horizontal_items = self.getHorizontalItems(polyg)
         self.y_keys = sorted(tuple(self.horizontal_items.keys()))
 
@@ -224,41 +224,23 @@ def getPolygons(graph):
     return cycled_paths
 
 def isInsidePolygon(polygon, x_min, y_min, x_max, y_max):
-    #no line of the cycled path from x_min to x_max crosses vertical items
-    #(except those on boundaries)
-    left_boundary, right_boundary = polygon.x_keys[0], polygon.x_keys[-1]
-    up_boundary, down_boundary = polygon.y_keys[-1], polygon.y_keys[0]
-    if (x_min < left_boundary) or (x_max > right_boundary) or (y_max > up_boundary) or (y_min < down_boundary):
-        return False
-    for x, x_boundary in {(x_min, left_boundary), (x_max, right_boundary)}:
-        if x == x_boundary:
-            for y in {y_min, y_max}:
-                interval_i = lbs(polygon.vertical_items[x], y, lambda x:x[1])
-                y0, y1 = polygon.vertical_items[x][interval_i]
-                if not (y0 <= y <= y1):
-                    return False
-    for y, y_boundary in {(y_min, up_boundary), (y_max, down_boundary)}:
-        if y == y_boundary:
-            for x in {x_min, x_max}:
-                interval_i = lbs(polygon.horizontal_items[y], x, lambda x:x[1])
-                x0, x1 = polygon.horizontal_items[y][interval_i]
-                if not (x0 <= x <= x1):
-                    return False
-    for x_i in range(1, len(polygon.x_keys) - 1):
-        x = polygon.x_keys[x_i]
-        # the vertical item of polygon MUST NOT cross y_min or y_max line
-        for y_line in {y_min, y_max}:
-            interval_i = lbs(polygon.vertical_items[x], y_line, lambda x:x[1])
-            y0, y1 = polygon.vertical_items[x][interval_i]
-            if (y0 < y_line < y1):
-                return False
-    for y_i in range(1, len(polygon.y_keys)-1):
-        y = polygon.y_keys[y_i]
-        for x_line in {x_min, x_max}:
-            interval_i = lbs(polygon.horizontal_items[y], x_line, lambda x:x[1])
-            x0, x1 = polygon.horizontal_items[y][interval_i]
-            if (x0 < x_line < x1):
-                return False
+    for x, y in {(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)}:
+        if (x, y) in polygon.dots:
+            continue
+        search_start = lbs(polygon.x_keys, x)
+        assert polygon.x_keys[search_start] == x
+        cross_count = 0
+        x_prev = None
+        for x_i in range(search_start, len(polygon.x_keys)):
+            x_val = polygon.x_keys[x_i]
+            y_i = lbs(polygon.vertical_items[x_val], y, lambda val:val[1])
+            y0, y1 = polygon.vertical_items[x_val][y_i]
+            assert x_prev != x_val - 1
+            if (y0 <= y <= y1) and (x_prev != (x_val-1)):
+                cross_count += 1 
+        #print(cross_count)
+        if cross_count % 2 == 0:
+            return False
     return True
 
 def isInsideSomePolygon(polygons, x_min, y_min, x_max, y_max):
@@ -274,7 +256,7 @@ def readCoords(name):
     return coords
 
 if __name__ == '__main__':
-    coords = readCoords("test_file")
+    coords = readCoords("test_file2")
     best = 0
     for i, (x1, y1) in enumerate(coords):
         for k in range(i + 1, len(coords)):
@@ -284,6 +266,8 @@ if __name__ == '__main__':
     debug = (len(sys.argv) > 1) and ('debug' in sys.argv)
     graph = getGraph(coords)
     polygons = getPolygons(graph)
+    # :( True:
+    assert len(coords) == len(polygons[0].val) - 1
     best = 0
     #coords = [(2,3), (9,5)
     #print('verticals',polygons[0].vertical_items)
@@ -302,6 +286,10 @@ if __name__ == '__main__':
                 best = _best
             if debug:
                 print('-----------\n')
+            if x_min == x_min:
+                best = max(best, y_max - y_min + 1)
+            elif y_min == y_min:
+                best = max(best, x_max - x_min + 1)
     print('Part 2', best)
         
 
