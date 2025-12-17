@@ -223,24 +223,58 @@ def getPolygons(graph):
 
     return cycled_paths
 
-def isInsidePolygon(polygon, x_min, y_min, x_max, y_max):
-    for x, y in {(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)}:
-        if (x, y) in polygon.dots:
-            continue
-        search_start = lbs(polygon.x_keys, x)
-        assert polygon.x_keys[search_start] == x
-        cross_count = 0
-        x_prev = None
-        for x_i in range(search_start, len(polygon.x_keys)):
-            x_val = polygon.x_keys[x_i]
-            y_i = lbs(polygon.vertical_items[x_val], y, lambda val:val[1])
-            y0, y1 = polygon.vertical_items[x_val][y_i]
-            assert x_prev != x_val - 1
-            if (y0 <= y <= y1) and (x_prev != (x_val-1)):
-                cross_count += 1 
-        #print(cross_count)
-        if cross_count % 2 == 0:
+def getCrossCount(polygon, x, y):
+    if (x, y) in polygon.dots:
+        return 1
+    if (x < polygon.x_keys[0]) or (x > polygon.x_keys[-1]):
+        return 0
+    y_i = lbs(polygon.y_keys, y)
+    if polygon.y_keys[y_i] == y:
+        interval_i = lbs(polygon.horizontal_items[y], x)
+        x0, x1 = polygon.horizontal_items[y][interval_i]
+        if x0 <= x <= x1:
+            return 1
+    x_start = lbs(polygon.x_keys, x)
+    cross_count = 0
+    prev_cross_sign = None
+    for x_i in range(x_start, len(polygon.x_keys)):
+        _x = polygon.x_keys[x_i]
+        y_i = lbs(polygon.vertical_items[_x], y, lambda val:val[1])
+        y0, y1 = polygon.vertical_items[_x][y_i]
+        if y0 <= y <= y1:
+            if _x == x:
+                return 1
+            if y0 < y < y1:
+                prev_cross_sign = None
+                cross_count += 1
+            elif (y0 == y) and prev_cross_sign == None:
+                cross_count += 1
+                prev_cross_sign = 0
+            elif (y1 == y) and prev_cross_sign == None:
+                cross_count += 1
+                prev_cross_sign = 1
+            else:
+                if ((y0 == y) and (prev_cross_sign == 0)) or ((y1 == y) and (prev_cross_sign == 1)):
+                    cross_count += 1
+                prev_cross_sign = None
+    return cross_count 
+
+
+def isInsidePolygon(polygon, x_min, y_min, x_max, y_max, debug = False):
+    if (x_min == x_max) or (y_min == y_max):
+        return True
+    for x, y in polygon.dots:
+        if (x_min < x < x_max) and (y_min < y < y_max):
             return False
+    for x, y in [(x_min, y_min), (x_min, y_max), (x_max, y_max), (x_max, y_min)]:
+        if getCrossCount(polygon, x, y) % 2 == 0:
+            return False
+    for x in range(x_min, x_max + 1, max(1, (x_max - x_min) // 1000)):
+        for y in range(y_min, y_max + 1, max(1, (y_max - y_min) // 1000)):
+            if getCrossCount(polygon, x, y) % 2 == 0:
+                if debug:
+                    print(f'bad dot: {x}, {y}')
+                return False
     return True
 
 def isInsideSomePolygon(polygons, x_min, y_min, x_max, y_max):
@@ -253,10 +287,29 @@ def readCoords(name):
     coords = None
     with open(name) as file:
         coords = tuple([tuple(map(int, line.strip().split(','))) for line in file.readlines()]) 
+    '''
+    zoo = dict()
+    for x, y in coords:
+        if x in zoo:
+            zoo[x] += 1
+        else:
+            zoo[x] = 1
+    for item in zoo.values():
+        if item != 2:
+            print('ohoho!')
+    '''
     return coords
 
 if __name__ == '__main__':
-    coords = readCoords("test_file2")
+    coords = readCoords("test_file")
+    '''
+    x_items = [val[0] for val in coords]
+    y_items = [val[1] for val in coords]
+    min_x, max_x = min(x_items), max(x_items)
+    min_y, max_y = min(y_items), max(y_items)
+    print(f'min_x: {min_x}, max_x: {max_x}, min_y: {min_y}, max_y: {max_y}')
+    exit()
+    '''
     best = 0
     for i, (x1, y1) in enumerate(coords):
         for k in range(i + 1, len(coords)):
@@ -267,11 +320,7 @@ if __name__ == '__main__':
     graph = getGraph(coords)
     polygons = getPolygons(graph)
     # :( True:
-    assert len(coords) == len(polygons[0].val) - 1
     best = 0
-    #coords = [(2,3), (9,5)
-    #print('verticals',polygons[0].vertical_items)
-    #print('horizontals',polygons[0].horizontal_items)
     for i, (x1, y1) in enumerate(coords):
         for k in range(i + 1, len(coords)):
             x2, y2 = coords[k]
@@ -279,17 +328,12 @@ if __name__ == '__main__':
             y_min, y_max = min(y1, y2), max(y1, y2)
             _best = (x_max - x_min + 1) * (y_max - y_min + 1)
             if debug:
-                print(f"Analazying rect ({x_min}, {y_min}), ({x_max}, {y_max}) with possible s = {_best}:")
+                pass#print(f"Analazying rect ({x_min}, {y_min}), ({x_max}, {y_max}) with possible s = {_best}:")
             if (_best > best) and isInsideSomePolygon(polygons, x_min, y_min, x_max, y_max):
                 if debug:
-                    print('rect is ok')
+                    print(f'rect is ok; s = {_best}')
                 best = _best
-            if debug:
-                print('-----------\n')
-            if x_min == x_min:
-                best = max(best, y_max - y_min + 1)
-            elif y_min == y_min:
-                best = max(best, x_max - x_min + 1)
+            
     print('Part 2', best)
         
 
